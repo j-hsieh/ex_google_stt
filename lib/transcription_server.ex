@@ -9,6 +9,7 @@ defmodule ExGoogleSTT.TranscriptionServer do
 
   alias Google.Cloud.Speech.V2.{
     RecognitionConfig,
+    SpeakerDiarizationConfig,
     StreamingRecognitionConfig,
     StreamingRecognizeRequest,
     StreamingRecognizeResponse,
@@ -187,7 +188,7 @@ defmodule ExGoogleSTT.TranscriptionServer do
       |> cast_decoding_config(opts_map)
       |> cast_model(opts_map)
       |> cast_language_codes(opts_map)
-      |> cast_automatic_punctuation(opts_map)
+      |> cast_features(opts_map)
 
     # ABSOLUTELY NECESSARY FOR INFINITE STREAMING, because it lets us receive a response immediately after the stream is opened
     activity_events = true
@@ -242,6 +243,43 @@ defmodule ExGoogleSTT.TranscriptionServer do
 
   defp cast_language_codes(recognition_config, _), do: recognition_config
 
+  defp cast_features(recognition_config, opts_map) do
+    features = %{}
+
+    # Enable automatic punctuation
+    features =
+      case Map.get(opts_map, :enable_automatic_punctuation) do
+        nil -> features
+        val -> Map.put(features, :enable_automatic_punctuation, val)
+      end
+
+    # Enable speaker diarization
+    features =
+      case Map.get(opts_map, :enable_speaker_diarization) do
+        true ->
+          diarization_config = build_diarization_config(opts_map)
+          Map.put(features, :diarization_config, diarization_config)
+
+        _ ->
+          features
+      end
+
+    # Only set features if there are any
+    if map_size(features) > 0 do
+      Map.put(recognition_config, :features, features)
+    else
+      recognition_config
+    end
+  end
+
+  defp build_diarization_config(opts_map) do
+    %Google.Cloud.Speech.V2.SpeakerDiarizationConfig{
+      min_speaker_count: Map.get(opts_map, :diarization_min_speaker_count, 1),
+      max_speaker_count: Map.get(opts_map, :diarization_max_speaker_count, 6)
+    }
+  end
+
+  # Legacy function for backwards compatibility
   defp cast_automatic_punctuation(
          recognition_config,
          %{enable_automatic_punctuation: enable_automatic_punctuation}
