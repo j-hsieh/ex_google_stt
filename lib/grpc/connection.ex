@@ -11,7 +11,7 @@ defmodule ExGoogleSTT.Grpc.Connection do
     cred = GRPC.Credential.new(ssl: [cacerts: :certifi.cacerts(), verify: :verify_none])
     gun_opts = [http2_opts: %{keepalive: :infinity}]
     api_port = 443
-    api_url = "speech.googleapis.com"
+    api_url = "us-central1-speech.googleapis.com"
 
     GRPC.Stub.connect(api_url, api_port, cred: cred, adapter_opts: gun_opts)
   end
