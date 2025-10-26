@@ -334,12 +334,61 @@ defmodule ExGoogleSTT.TranscriptionServer do
   defp parse_response(_), do: []
 
   defp parse_results(results) do
-    results_content = Enum.map_join(results, "", &parse_result(&1))
+    # Extract transcript content (backwards compatible)
+    results_content = Enum.map_join(results, "", &extract_transcript(&1))
     is_final = Enum.any?(results, & &1.is_final)
 
-    [{:stt_event, %Transcript{content: results_content, is_final: is_final}}]
+    # Extract word-level data and confidence from the first result with alternatives
+    {words, confidence} = extract_word_info(results)
+
+    [{:stt_event, %Transcript{
+      content: results_content,
+      is_final: is_final,
+      words: words,
+      confidence: confidence
+    }}]
   end
 
+  defp extract_transcript(%StreamingRecognitionResult{alternatives: [alternative]}),
+    do: alternative.transcript
+
+  defp extract_transcript(%StreamingRecognitionResult{alternatives: []}),
+    do: ""
+
+  defp extract_word_info(results) do
+    # Find the first result with alternatives that has word info
+    result = Enum.find(results, fn r ->
+      case r.alternatives do
+        [alt | _] -> alt.words != nil && length(alt.words) > 0
+        _ -> false
+      end
+    end)
+
+    case result do
+      nil ->
+        {nil, nil}
+
+      %StreamingRecognitionResult{alternatives: [alternative | _]} ->
+        words = Enum.map(alternative.words || [], fn word_info ->
+          %{
+            word: word_info.word,
+            start_offset: duration_to_ms(word_info.start_offset),
+            end_offset: duration_to_ms(word_info.end_offset),
+            speaker_label: word_info.speaker_label,
+            confidence: word_info.confidence || 0.0
+          }
+        end)
+
+        {words, alternative.confidence}
+    end
+  end
+
+  defp duration_to_ms(nil), do: 0
+  defp duration_to_ms(%Google.Protobuf.Duration{seconds: seconds, nanos: nanos}) do
+    seconds * 1000 + div(nanos, 1_000_000)
+  end
+
+  # Legacy parse_result function kept for backwards compatibility
   defp parse_result(%StreamingRecognitionResult{alternatives: [alternative]}),
     do: alternative.transcript
 
