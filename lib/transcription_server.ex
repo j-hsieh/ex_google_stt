@@ -74,6 +74,7 @@ defmodule ExGoogleSTT.TranscriptionServer do
     recognizer = Map.get(opts_map, :recognizer, default_recognizer())
     split_by_chunk = Map.get(opts_map, :split_by_chunk, true)
     target = Map.get(opts_map, :target, self())
+    endpoint = Map.get(opts_map, :endpoint)
 
     # This ensures the transcriptions server is killed if the caller dies
     Process.monitor(target)
@@ -85,7 +86,8 @@ defmodule ExGoogleSTT.TranscriptionServer do
        speech_client: nil,
        split_by_chunk: split_by_chunk,
        stream_state: :closed,
-       target: target
+       target: target,
+       endpoint: endpoint
      }}
   end
 
@@ -326,7 +328,8 @@ defmodule ExGoogleSTT.TranscriptionServer do
 
   defp restart_speech_client(state) do
     maybe_kill_speech_client(state.speech_client)
-    {:ok, speech_client} = GrpcSpeechClient.start_link()
+    opts = if state.endpoint, do: [endpoint: state.endpoint], else: []
+    {:ok, speech_client} = GrpcSpeechClient.start_link(self(), opts)
     :ok = send_config(speech_client, state.config_request)
     speech_client
   end
