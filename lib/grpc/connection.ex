@@ -5,13 +5,18 @@ defmodule ExGoogleSTT.Grpc.Connection do
 
   @doc """
   Connects to a Google Cloud Speech-to-Text API
+
+  ## Options
+
+  * `:endpoint` - The API endpoint URL. Defaults to "speech.googleapis.com" (global).
+    For regional endpoints, use format like "us-central1-speech.googleapis.com"
   """
-  @spec connect() :: {:ok, GRPC.Channel.t()}
-  def connect() do
+  @spec connect(Keyword.t()) :: {:ok, GRPC.Channel.t()}
+  def connect(opts \\ []) do
     cred = GRPC.Credential.new(ssl: [cacerts: :certifi.cacerts(), verify: :verify_none])
     gun_opts = [http2_opts: %{keepalive: :infinity}]
     api_port = 443
-    api_url = "us-central1-speech.googleapis.com"
+    api_url = Keyword.get(opts, :endpoint, Application.get_env(:ex_google_stt, :endpoint, "speech.googleapis.com"))
 
     GRPC.Stub.connect(api_url, api_port, cred: cred, adapter_opts: gun_opts)
   end

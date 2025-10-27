@@ -13,9 +13,9 @@ defmodule ExGoogleSTT.Grpc.SpeechClient do
 
   @timeout 50
 
-  @spec start_link(target :: pid()) :: {:ok, pid} | {:error, any()}
-  def start_link(target \\ self()) do
-    with {:ok, channel} <- Connection.connect() do
+  @spec start_link(pid(), Keyword.t()) :: {:ok, pid} | {:error, any()}
+  def start_link(target \\ self(), opts \\ []) do
+    with {:ok, channel} <- Connection.connect(opts) do
       pid = apply(Kernel, :spawn_link, [__MODULE__, :init, [channel, target]])
       {:ok, pid}
     end
