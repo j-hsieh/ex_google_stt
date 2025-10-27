@@ -11,6 +11,7 @@ defmodule ExGoogleSTT.TranscriptionServer do
     RecognitionConfig,
     SpeakerDiarizationConfig,
     StreamingRecognitionConfig,
+    StreamingRecognitionFeatures,
     StreamingRecognizeRequest,
     StreamingRecognizeResponse,
     StreamingRecognitionResult
@@ -197,11 +198,15 @@ defmodule ExGoogleSTT.TranscriptionServer do
 
     interim_results = Map.get(opts_map, :interim_results, false)
 
+    # Build streaming features with optional voice activity timeout
+    streaming_features = %StreamingRecognitionFeatures{
+      enable_voice_activity_events: activity_events,
+      interim_results: interim_results
+    }
+    |> cast_voice_activity_timeout(opts_map)
+
     %StreamingRecognitionConfig{
-      streaming_features: %{
-        enable_voice_activity_events: activity_events,
-        interim_results: interim_results
-      }
+      streaming_features: streaming_features
     }
     |> cast_recognition_config(recognition_config)
   end
@@ -427,6 +432,25 @@ defmodule ExGoogleSTT.TranscriptionServer do
   defp duration_to_ms(nil), do: 0
   defp duration_to_ms(%Google.Protobuf.Duration{seconds: seconds, nanos: nanos}) do
     seconds * 1000 + div(nanos, 1_000_000)
+  end
+
+  # Cast voice activity timeout configuration
+  # speech_end_timeout: triggers finalization after N seconds of silence (e.g., "2s")
+  defp cast_voice_activity_timeout(streaming_features, %{speech_end_timeout: timeout}) when is_binary(timeout) do
+    voice_activity_timeout = %StreamingRecognitionFeatures.VoiceActivityTimeout{
+      speech_end_timeout: parse_duration(timeout)
+    }
+    Map.put(streaming_features, :voice_activity_timeout, voice_activity_timeout)
+  end
+
+  defp cast_voice_activity_timeout(streaming_features, _opts_map), do: streaming_features
+
+  # Parse duration string (e.g., "2s") to Google Duration protobuf format
+  defp parse_duration(duration_string) when is_binary(duration_string) do
+    case Integer.parse(duration_string) do
+      {seconds, "s"} -> %Google.Protobuf.Duration{seconds: seconds, nanos: 0}
+      _ -> raise "Invalid duration format. Expected format like '2s', got: #{duration_string}"
+    end
   end
 
   # Legacy parse_result function kept for backwards compatibility
