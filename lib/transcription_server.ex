@@ -380,19 +380,41 @@ defmodule ExGoogleSTT.TranscriptionServer do
   defp parse_response(_), do: []
 
   defp parse_results(results) do
-    # Extract transcript content (backwards compatible)
-    results_content = Enum.map_join(results, "", &extract_transcript(&1))
-    is_final = Enum.any?(results, & &1.is_final)
+    # IMPORTANT FIX: Process each result separately instead of concatenating
+    # This prevents massive text repetitions when Google sends duplicate results
+    # Each result is a separate transcript segment and should be broadcast individually
+    Enum.flat_map(results, fn result ->
+      transcript_text = extract_transcript(result)
 
-    # Extract word-level data and confidence from the first result with alternatives
-    {words, confidence} = extract_word_info(results)
+      # Skip empty results
+      if String.trim(transcript_text) == "" do
+        []
+      else
+        # Extract word-level data and confidence from this specific result
+        {words, confidence} = case result.alternatives do
+          [alt | _] when alt.words != nil and length(alt.words) > 0 ->
+            word_list = Enum.map(alt.words, fn word_info ->
+              %{
+                word: word_info.word,
+                start_time: word_info.start_offset,
+                end_time: word_info.end_offset,
+                confidence: word_info.confidence
+              }
+            end)
+            avg_confidence = Enum.reduce(word_list, 0.0, fn w, acc -> acc + (w.confidence || 0.0) end) / max(length(word_list), 1)
+            {word_list, avg_confidence}
+          _ ->
+            {[], nil}
+        end
 
-    [{:stt_event, %Transcript{
-      content: results_content,
-      is_final: is_final,
-      words: words,
-      confidence: confidence
-    }}]
+        [{:stt_event, %Transcript{
+          content: transcript_text,
+          is_final: result.is_final,
+          words: words,
+          confidence: confidence
+        }}]
+      end
+    end)
   end
 
   defp extract_transcript(%StreamingRecognitionResult{alternatives: [alternative]}),
