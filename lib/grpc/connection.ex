@@ -14,7 +14,9 @@ defmodule ExGoogleSTT.Grpc.Connection do
   @spec connect(Keyword.t()) :: {:ok, GRPC.Channel.t()}
   def connect(opts \\ []) do
     cred = GRPC.Credential.new(ssl: [cacerts: :certifi.cacerts(), verify: :verify_none])
-    gun_opts = [http2_opts: %{keepalive: :infinity}]
+    # HTTP/2 keepalive sends PING frames to keep connection alive through Cloud Run/load balancers
+    # Without this, connections are silently terminated after ~30s of inactivity during Chirp_3 processing
+    gun_opts = [http2_opts: %{keepalive: 30_000, keepalive_tolerance: 3}]
     api_port = 443
     api_url = Keyword.get(opts, :endpoint, Application.get_env(:ex_google_stt, :endpoint, "speech.googleapis.com"))
 
